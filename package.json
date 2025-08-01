@@ -1,0 +1,13 @@
+{
+  "name": "futebol-de-botao-online",
+  "version": "1.0.0",
+  "description": "Jogo de futebol de botão online",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}
