@@ -264,7 +264,9 @@ let myTeam = -1;
 let gameStarted = false;
 let rgbHue = 0;
 
-const socket = io();
+const socket = io({
+  transports: ["websocket"]
+});
 
 socket.on('connect', () => {
     console.log('Conectado ao servidor!', socket.id);
