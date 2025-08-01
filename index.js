@@ -9,7 +9,8 @@ const io = new Server(server, {
   cors: {
     origin: "https://futebol-online.vercel.app",
     methods: ["GET", "POST"]
-  }
+  },
+  transports: ['websocket', 'polling']
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
