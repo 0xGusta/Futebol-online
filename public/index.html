@@ -93,7 +93,7 @@ body {
 
 #game-container {
   position: relative;
-  display: none;
+  display: none; /* Inicia oculto */
   border-radius: 30px;
   overflow: hidden;
   box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.08);
@@ -244,6 +244,7 @@ canvas {
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
+
 const lobby = document.getElementById('lobby');
 const roomList = document.getElementById('room-list');
 const createRoomForm = document.getElementById('create-room-form');
@@ -263,6 +264,8 @@ let ball = { x: 0, y: 0, radius: 30, angle: 0 };
 let myTeam = -1;
 let gameStarted = false;
 let rgbHue = 0;
+let messageText = '';
+let countdownValue = '';
 
 const socket = io({
   transports: ["websocket"]
@@ -276,18 +279,20 @@ socket.on('roomList', (rooms) => {
     roomList.innerHTML = '';
     for (const roomName in rooms) {
         const room = rooms[roomName];
-        const li = document.createElement('li');
-        li.textContent = `${roomName} (${room.playerCount}/2)`;
-        const joinButton = document.createElement('button');
-        joinButton.textContent = 'Entrar';
-        joinButton.onclick = () => {
-            const password = room.hasPassword ? prompt('Digite a senha da sala:') : '';
-            if (password !== null) {
-                socket.emit('joinRoom', { roomName, password });
-            }
-        };
-        li.appendChild(joinButton);
-        roomList.appendChild(li);
+        if (room.playerCount < 2) {
+            const li = document.createElement('li');
+            li.textContent = `${roomName} (${room.playerCount}/2)`;
+            const joinButton = document.createElement('button');
+            joinButton.textContent = 'Entrar';
+            joinButton.onclick = () => {
+                const password = room.hasPassword ? prompt('Digite a senha da sala:') : '';
+                if (password !== null) {
+                    socket.emit('joinRoom', { roomName, password });
+                }
+            };
+            li.appendChild(joinButton);
+            roomList.appendChild(li);
+        }
     }
 });
 
@@ -298,7 +303,6 @@ createRoomForm.addEventListener('submit', (e) => {
     socket.emit('createRoom', { roomName, password });
 });
 
-
 socket.on('joinError', (message) => {
     alert(message);
 });
@@ -306,30 +310,33 @@ socket.on('joinError', (message) => {
 socket.on('waitingForOpponent', () => {
     lobby.style.display = 'none';
     gameContainer.style.display = 'inline-block';
-    drawMessage("Procurando um oponente...");
+    messageText = "Procurando um oponente...";
 });
 
 socket.on('gameStart', (data) => {
-    console.log("Jogo começou! Você é o time:", data.team);
     myTeam = data.team;
     pieces = data.state.pieces;
     ball = data.state.ball;
     updateScoreDisplay(data.state.scoreRed, data.state.scoreBlue);
     lobby.style.display = 'none';
     gameContainer.style.display = 'inline-block';
-    drawMessage(myTeam === 0 ? "Você é o time VERMELHO" : "Você é o time AZUL");
-    setTimeout(() => { gameStarted = true; }, 3000);
+    messageText = myTeam === 0 ? "Você é o time VERMELHO" : "Você é o time AZUL";
 });
 
 socket.on('gameState', (serverState) => {
-    if (!gameStarted) return;
+    if (!gameStarted && serverState.gameStarted) {
+        gameStarted = true;
+        messageText = '';
+    }
     pieces = serverState.pieces;
     ball = serverState.ball;
     updateScoreDisplay(serverState.scoreRed, serverState.scoreBlue);
 });
 
 socket.on('countdown', (value) => {
-    drawMessage(value > 0 ? value : 'VAI!');
+    gameStarted = false;
+    countdownValue = value;
+    messageText = value > 0 ? value : 'VAI!';
 });
 
 socket.on('goalScored', () => {
@@ -405,11 +412,11 @@ restartButton.addEventListener('click', () => {
 
 function showGoalAnimation() {
     goalDisplay.style.opacity = 1;
-    setTimeout(() => { goalDisplay.style.opacity = 0; }, 1000);
+    setTimeout(() => { goalDisplay.style.opacity = 0; }, 1500);
 }
 
 function showVictoryScreen(winningTeam) {
-    victoryMessage.textContent = `${winningTeam}`;
+    victoryMessage.textContent = `${winningTeam} Venceu!`;
     victoryOverlay.classList.add('active');
 }
 
@@ -426,27 +433,13 @@ logo.src = 'https://files.svgcdn.io/token-branded/monad.png';
 
 let redPlayerImageObjects = redPlayerImages.map(url => { const img = new Image(); img.src = url; return img; });
 let bluePlayerImageObjects = bluePlayerImages.map(url => { const img = new Image(); img.src = url; return img; });
-let messageText = '';
-let messageScale = 0;
-
-function drawMessage(text) {
-    messageText = text;
-    ctx.save();
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(canvas.width / 2 - 350, canvas.height / 2 - 70, 700, 140);
-    ctx.fillStyle = 'white';
-    ctx.font = '700 52px "Inter"';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
-    ctx.restore();
-}
 
 function draw() {
     rgbHue = (rgbHue + 5) % 360;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
     const wallThickness = 10;
     const goalHeight = 300 * 1.10;
     const goalWidth = 10;
@@ -457,6 +450,7 @@ function draw() {
     ctx.fillRect(0, canvas.height / 2 + goalHeight / 2, wallThickness, canvas.height / 2 - goalHeight / 2);
     ctx.fillRect(canvas.width - wallThickness, 0, wallThickness, canvas.height / 2 - goalHeight / 2);
     ctx.fillRect(canvas.width - wallThickness, canvas.height / 2 + goalHeight / 2, wallThickness, canvas.height / 2 - goalHeight / 2);
+    
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 4;
     ctx.beginPath();
@@ -490,61 +484,37 @@ function draw() {
     ctx.beginPath();
     ctx.arc(canvas.width - wallThickness - penaltyAreaWidth * 0.7, canvas.height / 2, 100, Math.PI * -0.3, Math.PI * 0.3);
     ctx.stroke();
+
     ctx.fillStyle = 'rgba(150, 0, 255, 0.3)';
     ctx.fillRect(wallThickness, canvas.height / 2 - goalHeight / 2, goalWidth, goalHeight);
     ctx.fillRect(canvas.width - wallThickness - goalWidth, canvas.height / 2 - goalHeight / 2, goalWidth, goalHeight);
-    ctx.strokeStyle = '#cccccc';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(wallThickness + goalWidth, canvas.height / 2 - goalHeight / 2);
-    ctx.lineTo(wallThickness + goalWidth + 20, canvas.height / 2 - goalHeight / 2 - 20);
-    ctx.lineTo(wallThickness + goalWidth + 20, canvas.height / 2 + goalHeight / 2 + 20);
-    ctx.lineTo(wallThickness + goalWidth, canvas.height / 2 + goalHeight / 2);
-    ctx.closePath();
-    ctx.stroke();
-    for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.moveTo(wallThickness + goalWidth, canvas.height / 2 - goalHeight / 2 + (goalHeight / 4) * i); ctx.lineTo(wallThickness + goalWidth + 20, canvas.height / 2 - goalHeight / 2 + (goalHeight / 4) * i - (20 * (i/4))); ctx.stroke(); }
-    ctx.beginPath();
-    ctx.moveTo(canvas.width - wallThickness - goalWidth, canvas.height / 2 - goalHeight / 2);
-    ctx.lineTo(canvas.width - wallThickness - goalWidth - 20, canvas.height / 2 - goalHeight / 2 - 20);
-    ctx.lineTo(canvas.width - wallThickness - goalWidth - 20, canvas.height / 2 + goalHeight / 2 + 20);
-    ctx.lineTo(canvas.width - wallThickness - goalWidth, canvas.height / 2 + goalHeight / 2);
-    ctx.closePath();
-    ctx.stroke();
-    for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.moveTo(canvas.width - wallThickness - goalWidth, canvas.height / 2 - goalHeight / 2 + (goalHeight / 4) * i); ctx.lineTo(canvas.width - wallThickness - goalWidth - 20, canvas.height / 2 - goalHeight / 2 + (goalHeight / 4) * i - (20 * (i/4))); ctx.stroke(); }
-    ctx.lineWidth = 4;
-    const flagSize = 30;
-    const flagColor = '#8a2be2';
-    ctx.fillStyle = flagColor;
-    ctx.beginPath(); ctx.moveTo(wallThickness, wallThickness); ctx.lineTo(wallThickness + flagSize, wallThickness); ctx.lineTo(wallThickness, wallThickness + flagSize); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(canvas.width - wallThickness, wallThickness); ctx.lineTo(canvas.width - wallThickness - flagSize, wallThickness); ctx.lineTo(canvas.width - wallThickness, wallThickness + flagSize); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(wallThickness, canvas.height - wallThickness); ctx.lineTo(wallThickness + flagSize, canvas.height - wallThickness); ctx.lineTo(wallThickness, canvas.height - wallThickness - flagSize); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(canvas.width - wallThickness, canvas.height - wallThickness); ctx.lineTo(canvas.width - wallThickness - flagSize, canvas.height - wallThickness); ctx.lineTo(canvas.width - wallThickness, canvas.height - wallThickness - flagSize); ctx.closePath(); ctx.fill();
+
     if (logo.complete) { const logoScale = 1.40; const logoWidth = 300 * logoScale; const logoHeight = logoWidth * (logo.height / logo.width); const centerX = canvas.width / 2 - logoWidth / 2; const centerY = canvas.height / 2 - logoHeight / 2; ctx.globalAlpha = 0.8; ctx.drawImage(logo, centerX, centerY, logoWidth, logoHeight); ctx.globalAlpha = 1.0; }
     
-    for (const p of pieces) {
-        const img = p.team === 0 ? redPlayerImageObjects[p.id % redPlayerImageObjects.length] : bluePlayerImageObjects[p.id % bluePlayerImageObjects.length];
-        ctx.lineWidth = 5;
-        ctx.shadowBlur = 10;
-        if (p.team === 0) { ctx.strokeStyle = '#ff0000'; ctx.shadowColor = '#ff0000'; }
-        else { ctx.strokeStyle = '#00ffff'; ctx.shadowColor = '#00ffff'; }
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.stroke();
-        ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
-        if (img && img.complete) {
-            ctx.save();
-            ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2, true); ctx.clip();
-            const imgSize = p.radius * 2; const imgX = p.x - p.radius; const imgY = p.y - p.radius;
-            ctx.drawImage(img, imgX, imgY, imgSize, imgSize);
-            ctx.restore();
+    if(pieces && pieces.length > 0) {
+        for (const p of pieces) {
+            const img = p.team === 0 ? redPlayerImageObjects[p.id % redPlayerImageObjects.length] : bluePlayerImageObjects[p.id % bluePlayerImageObjects.length];
+            ctx.lineWidth = 5;
+            ctx.shadowBlur = 10;
+            if (p.team === 0) { ctx.strokeStyle = '#ff0000'; ctx.shadowColor = '#ff0000'; }
+            else { ctx.strokeStyle = '#00ffff'; ctx.shadowColor = '#00ffff'; }
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.stroke();
+            ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
+            if (img && img.complete) {
+                ctx.save();
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2, true); ctx.clip();
+                const imgSize = p.radius * 2; const imgX = p.x - p.radius; const imgY = p.y - p.radius;
+                ctx.drawImage(img, imgX, imgY, imgSize, imgSize);
+                ctx.restore();
+            }
         }
     }
     
-    if (soccerBallImage.complete) {
+    if (ball && soccerBallImage.complete) {
         ctx.save(); ctx.translate(ball.x, ball.y); ctx.rotate(ball.angle);
         const ballImgSize = ball.radius * 2;
         ctx.drawImage(soccerBallImage, -ballImgSize / 2, -ballImgSize / 2, ballImgSize, ballImgSize);
         ctx.restore();
-    } else {
-        ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2); ctx.fillStyle = 'white'; ctx.fill(); ctx.strokeStyle = '#999'; ctx.lineWidth = 3; ctx.stroke();
     }
     
     if (dragging && selected && dragVector) {
@@ -570,14 +540,23 @@ function draw() {
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'; ctx.lineWidth = 3; ctx.stroke();
         }
     }
+
+    if (messageText) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(canvas.width / 2 - 350, canvas.height / 2 - 70, 700, 140);
+      ctx.fillStyle = 'white';
+      ctx.font = '700 52px "Inter"';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(messageText, canvas.width / 2, canvas.height / 2);
+      ctx.restore();
+    }
+
+    requestAnimationFrame(draw);
 }
 
-function loop() {
-  draw();
-  requestAnimationFrame(loop);
-}
-
-loop();
+draw();
 </script>
 </body>
 </html>
